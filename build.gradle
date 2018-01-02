@@ -2,7 +2,7 @@ group 'me.avo'
 version '1.0'
 
 buildscript {
-    ext.kotlin_version = '1.1.4-3'
+    ext.kotlin_version = '1.2.10'
     ext.ktor_version = '0.4.0'
 
     repositories {

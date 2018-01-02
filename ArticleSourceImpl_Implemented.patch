@@ -1,0 +1,790 @@
+Index: src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/TagSourceImpl.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/TagSourceImpl.kt	(revision )
++++ src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/TagSourceImpl.kt	(revision )
+@@ -0,0 +1,14 @@
++package me.avo.realworld.kotlin.ktor.persistence
++
++import org.jetbrains.exposed.sql.selectAll
++import org.jetbrains.exposed.sql.transactions.transaction
++
++class TagSourceImpl : TagSource {
++
++    override fun getAllTags() = transaction {
++        Tags.slice(Tags.tag)
++                .selectAll()
++                .map { it[Tags.tag] }
++    }
++
++}
+Index: src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/ArticleSource.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/ArticleSource.kt	(revision 1c8c96304a8d375c22f0c9f320d285bd6e07922a)
++++ src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/ArticleSource.kt	(revision )
+@@ -4,17 +4,17 @@
+ 
+ interface ArticleSource {
+ 
+-    fun getArticles(query: ArticleQuery): List<Article>
++    fun getArticles(query: ArticleQuery): List<ArticleDetails>
+ 
+-    fun getFeed(): List<Article>
++    fun getFeed(): List<ArticleDetails>
+ 
+-    fun getArticle(slug: String): Article
++    fun getArticle(slug: String): ArticleDetails
+ 
+-    fun insertArticle(user: User, details: ArticleDetails): Article
++    fun insertArticle(user: User, details11: Article)
+ 
+-    fun updateArticle(): Article
++    fun updateArticle(articleDetails: ArticleDetails): ArticleDetails?
+ 
+-    fun deleteArticle()
++    fun deleteArticle(articleId: Int)
+ 
+     fun addComment(comment: Comment): Comment
+ 
+@@ -22,9 +22,9 @@
+ 
+     fun deleteComment(slug: String, id: String)
+ 
+-    fun favorite(slug: String): Article
++    fun favorite(slug: String): ArticleDetails
+ 
+-    fun unfavorite(slug: String): Article
++    fun unfavorite(slug: String): ArticleDetails
+ 
+     fun getTags(): List<String>
+ 
+Index: src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/ProfileSourceImpl.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/ProfileSourceImpl.kt	(revision 1c8c96304a8d375c22f0c9f320d285bd6e07922a)
++++ src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/ProfileSourceImpl.kt	(revision )
+@@ -15,6 +15,14 @@
+                 }
+     }
+ 
++    override fun getUserProfile(userId : Int): Profile = transaction {
++        Users.select { Users.id eq userId }
++                .checkNull()
++                .let {
++                    it.toProfile(false)
++                }
++    }
++
+     fun isFollowing(source: Int, target: Int): Boolean = transaction {
+         Following.select { Following.sourceId eq source and (Following.targetId eq target) }
+                 .let { !it.empty() }
+Index: src/main/kotlin/me/avo/realworld/kotlin/ktor/data/User.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/kotlin/me/avo/realworld/kotlin/ktor/data/User.kt	(revision 1c8c96304a8d375c22f0c9f320d285bd6e07922a)
++++ src/main/kotlin/me/avo/realworld/kotlin/ktor/data/User.kt	(revision )
+@@ -12,10 +12,11 @@
+         val image: String?
+ ) {
+ 
++    fun getProfile() = Profile(username,bio,image,false)
++
+     companion object {
+ 
+         val key = AttributeKey<User>("user")
+-
+     }
+ 
+ }
+\ No newline at end of file
+Index: src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/UserSourceImpl.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/UserSourceImpl.kt	(revision 1c8c96304a8d375c22f0c9f320d285bd6e07922a)
++++ src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/UserSourceImpl.kt	(revision )
+@@ -16,8 +16,8 @@
+                 .let(ResultRow::toUser)
+     }
+ 
+-    private fun byId(id: Int): Op<Boolean> = Users.id eq id
+-    private fun byEmail(email: String): Op<Boolean> = Users.email eq email
++     fun byId(id: Int): Op<Boolean> = Users.id eq id
++     fun byEmail(email: String): Op<Boolean> = Users.email eq email
+ 
+     override fun insertUser(details: RegistrationDetails): Int = transaction {
+         Users.insert {
+Index: src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/Tables.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/Tables.kt	(revision 1c8c96304a8d375c22f0c9f320d285bd6e07922a)
++++ src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/Tables.kt	(revision )
+@@ -19,7 +19,7 @@
+ }
+ 
+ object Articles : Table("articles") {
+-    val id = integer("id").primaryKey()
++    val id = integer("id").primaryKey().autoIncrement()
+     val slug = varchar("slug", 255)
+     val title = varchar("title", 255)
+     val description = varchar("description", 255)
+Index: src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/ArticleSourceImpl.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/ArticleSourceImpl.kt	(revision 1c8c96304a8d375c22f0c9f320d285bd6e07922a)
++++ src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/ArticleSourceImpl.kt	(revision )
+@@ -2,15 +2,17 @@
+ 
+ import me.avo.realworld.kotlin.ktor.data.*
+ import org.jetbrains.exposed.sql.*
++import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+ import org.jetbrains.exposed.sql.transactions.transaction
+-import org.joda.time.DateTime
+ 
+ class ArticleSourceImpl : ArticleSource {
+ 
+-    override fun getArticles(query: ArticleQuery): List<Article> = transaction {
+-        (Articles leftJoin Users leftJoin Tags leftJoin (Favorites leftJoin Users))
+-                .slice(Articles.columns + Favorites.articleId.count())
+-                .select { parseQuery(query) }
++    override fun getArticles(query: ArticleQuery): List<ArticleDetails> = transaction {
++        (Articles leftJoin Users leftJoin Tags)
++//        (Articles leftJoin Users leftJoin Tags leftJoin (Favorites leftJoin Users))
++                .slice(Articles.columns)
++                .selectAll()
++//                .select { parseQuery(query) }
+                 .orderBy(Articles.createdAt, isAsc = false)
+                 .groupBy(*Articles.columns.toTypedArray())
+                 .limit(query.limit, query.offset)
+@@ -22,35 +24,38 @@
+     }
+ 
+     fun parseQuery(query: ArticleQuery): Op<Boolean> = with(SqlExpressionBuilder) {
+-        listOf(query.tag?.let { Tags.tag eq it },
+-                query.author?.let { Users.username eq it },
+-                query.favoritedBy?.let { Users.username eq it and (Favorites.userId eq Users.id) })
++        listOf( //query.tag?.let { Tags.tag eq it },
++                query.author?.let { Users.username eq it })
++//                query.favoritedBy?.let { Users.username eq it and (Favorites.userId eq Users.id) })
+                 .filterNotNull()
+                 .reduce { acc, op -> acc and op }
+     }
+ 
+-    fun getTags(article: Article) = Tags
++    fun getTags(articleDetails: ArticleDetails) = Tags
+             .slice(Tags.tag)
+-            .select { Tags.articleId eq article.id }
++            .select { Tags.articleId eq articleDetails.id }
+             .map { it[Tags.tag] }
+ 
+-    override fun getArticle(slug: String): Article {
+-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
++    override fun getArticle(slug: String) = transaction {
++        Articles.select{Articles.slug eq slug}.first()
++                .let(ResultRow::toArticle )
++
+     }
+ 
+-    override fun insertArticle(user: User, details: ArticleDetails): Article = transaction {
+-        val (title, description, body, tagList, slug, createdAt, updatedAt) = details
++    override fun insertArticle(user: User, details11: Article) = transaction {
++//        val (title, description, body, tagList, slug, createdAt, updatedAt) = details11
+         val id = Articles.insert {
+-            it[Articles.slug] = slug
+-            it[Articles.title] = title
+-            it[Articles.description] = description
+-            it[Articles.body] = body
+-            it[Articles.createdAt] = createdAt
+-            it[Articles.updatedAt] = updatedAt
++            it[Articles.slug] = details11.slug
++            it[Articles.title] = details11.title
++            it[Articles.description] = details11.description
++            it[Articles.body] = details11.body
++            it[Articles.createdAt] = details11.createdAt
++            it[Articles.updatedAt] = details11.updatedAt
++            it[Articles.authorId] = user.id
+         } get Articles.id
+ 
+-        insertTags(id, tagList)
+-        Article(id, slug, title, description, body, tagList, createdAt, updatedAt, false, 0, TODO())
++        insertTags(id, details11.tagList)
++//        ArticleDetails(id, slug, title, description, body, tagList, createdAt, updatedAt, false, 0, TODO())
+     }
+ 
+     fun insertTags(articleId: Int, tags: List<String>) = transaction {
+@@ -63,12 +68,26 @@
+ 
+     }
+ 
+-    override fun updateArticle(): Article {
+-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+-    }
++private fun findArticle(where: () -> Op<Boolean>) = transaction {
++    Articles.select{where.invoke()}
++            .firstOrNull()?.let(ResultRow::toArticle)
++}
+ 
+-    override fun deleteArticle() {
+-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
++    override fun updateArticle(articleDetails: ArticleDetails): ArticleDetails? = transaction {
++        Articles.update({Articles.id eq articleDetails.id}) {
++            it[Articles.title] = articleDetails.title
++             it[Articles.body] = articleDetails.body
++             it[Articles.description] = articleDetails.description
++             it[Articles.slug] = articleDetails.slug
++             it[Articles.createdAt] = articleDetails.createdAt
++             it[Articles.updatedAt] = articleDetails.updatedAt
++        }
++        findArticle {Articles.id eq articleDetails.id}
++    }
++
++    override fun deleteArticle(articleId: Int) : Unit = transaction {
++        Tags.deleteWhere { Tags.articleId eq articleId }
++        Articles.deleteWhere { Articles.id eq articleId }
+     }
+ 
+     override fun addComment(comment: Comment): Comment {
+@@ -83,18 +102,18 @@
+         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+     }
+ 
+-    override fun favorite(slug: String): Article {
++    override fun favorite(slug: String): ArticleDetails {
+         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+     }
+ 
+-    override fun unfavorite(slug: String): Article {
++    override fun unfavorite(slug: String): ArticleDetails {
+         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+     }
+ 
+-    override fun getFeed(): List<Article> {
++    override fun getFeed(): List<ArticleDetails> {
+         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+     }
+-
++    @Deprecated("This Function has been moved to TagSource Class")
+     override fun getTags() = transaction {
+         Tags.slice(Tags.tag)
+                 .selectAll()
+Index: src/main/kotlin/me/avo/realworld/kotlin/ktor/server/Routing.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/kotlin/me/avo/realworld/kotlin/ktor/server/Routing.kt	(revision 1c8c96304a8d375c22f0c9f320d285bd6e07922a)
++++ src/main/kotlin/me/avo/realworld/kotlin/ktor/server/Routing.kt	(revision )
+@@ -27,7 +27,7 @@
+ 
+     val tagSource: TagSource = TagSourceImpl()
+     get("tags") {
+-        val tags = tagSource.getAll()
++        val tags = tagSource.getAllTags()
+         call.respond(tags)
+     }
+ }
+\ No newline at end of file
+Index: src/main/resources/application.properties
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/resources/application.properties	(revision 1c8c96304a8d375c22f0c9f320d285bd6e07922a)
++++ src/main/resources/application.properties	(revision )
+@@ -1,5 +1,12 @@
+-db.user=conduit
+-db.pass=*$X1ROzcs%fg
++#db.user=conduit
++#db.pass=*$X1ROzcs%fg
++#db.driver=org.mariadb.jdbc.Driver
++#db.database=conduit
++#db.host=jdbc:mysql://localhost
++
++db.user=root
++db.pass=3456
+ db.driver=org.mariadb.jdbc.Driver
+ db.database=conduit
+-db.host=jdbc:mysql://localhost
+\ No newline at end of file
++db.host=jdbc:mysql://localhost
++
+Index: src/test/kotlin/me/avo/realworld/kotlin/ktor/persistence/ArticleDetailsSourceImplTest.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/test/kotlin/me/avo/realworld/kotlin/ktor/persistence/ArticleDetailsSourceImplTest.kt	(revision )
++++ src/test/kotlin/me/avo/realworld/kotlin/ktor/persistence/ArticleDetailsSourceImplTest.kt	(revision )
+@@ -0,0 +1,60 @@
++package me.avo.realworld.kotlin.ktor.persistence
++
++import me.avo.realworld.kotlin.ktor.availableArticles
++import me.avo.realworld.kotlin.ktor.availableTags
++import me.avo.realworld.kotlin.ktor.data.Article
++import me.avo.realworld.kotlin.ktor.data.ArticleQuery
++import org.amshove.kluent.`should equal`
++import org.amshove.kluent.`should not contain`
++import org.amshove.kluent.shouldContainAll
++import org.joda.time.DateTime
++import org.junit.jupiter.api.AfterEach
++import org.junit.jupiter.api.Test
++import org.junit.jupiter.api.TestInstance
++
++
++@TestInstance(TestInstance.Lifecycle.PER_CLASS)
++internal class ArticleDetailsSourceImplTest : TestEnvironment {
++
++    val ds: ArticleSource = ArticleSourceImpl()
++    val userDb : UserSource = UserSourceImpl()
++
++    @Test
++    fun getArticles() {
++        val query = ArticleQuery(null, null, null, 20, 0)
++        ds.getArticles(query).size `should equal` 3 //.map { it.toArticle() } shouldContainAll availableArticles
++    }
++
++    @Test
++    fun getAll() {
++        ds.getTags() shouldContainAll availableTags
++    }
++
++    @Test
++    fun insertArticle(){
++        val user = userDb.findUser("some@other.com")
++        val article = Article("new title","new","aa", listOf("new tag"),"new slug",DateTime(),DateTime())
++        ds.insertArticle(user,article)
++        ds.getArticle("new slug").toArticle() `should equal` article
++    }
++
++    @Test
++    fun updateArticle(){
++        val copy = ds.getArticle("test2").copy(slug = "updatedSlug", description = "updated description", title = "updated title")
++        val updateArticle = ds.updateArticle(copy)
++        println(copy)
++        copy `should equal` updateArticle
++    }
++
++    @Test
++    fun deleteArticle(){
++        val copy = ds.getArticle("test1")
++        ds.deleteArticle(copy.id)
++        val query = ArticleQuery(null, null, null, 20, 0)
++        ds.getArticles(query) `should not contain`(copy)
++
++    }
++
++
++
++}
+\ No newline at end of file
+Index: src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/TagSource.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/TagSource.kt	(revision )
++++ src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/TagSource.kt	(revision )
+@@ -0,0 +1,7 @@
++package me.avo.realworld.kotlin.ktor.persistence
++
++interface TagSource {
++    fun getAllTags(): List<String>
++
++
++}
+Index: src/test/kotlin/me/avo/realworld/kotlin/ktor/persistence/ArticleSourceImplTest.kt
+===================================================================
+--- src/test/kotlin/me/avo/realworld/kotlin/ktor/persistence/ArticleSourceImplTest.kt	(revision 1c8c96304a8d375c22f0c9f320d285bd6e07922a)
++++ src/test/kotlin/me/avo/realworld/kotlin/ktor/persistence/ArticleSourceImplTest.kt	(revision 1c8c96304a8d375c22f0c9f320d285bd6e07922a)
+@@ -1,26 +0,0 @@
+-package me.avo.realworld.kotlin.ktor.persistence
+-
+-import me.avo.realworld.kotlin.ktor.availableTags
+-import me.avo.realworld.kotlin.ktor.data.ArticleQuery
+-import org.amshove.kluent.shouldContainAll
+-import org.junit.jupiter.api.Test
+-import org.junit.jupiter.api.TestInstance
+-
+-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+-internal class ArticleSourceImplTest : TestEnvironment {
+-
+-    val ds: ArticleSource = ArticleSourceImpl()
+-
+-    @Test
+-    fun getArticles() {
+-        val query = ArticleQuery(null, null, null, 20, 0)
+-        ds.getArticles(query)
+-    }
+-
+-    @Test
+-    fun getAll() {
+-        ds.getTags() shouldContainAll availableTags
+-    }
+-
+-
+-}
+\ No newline at end of file
+Index: build.gradle
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- build.gradle	(revision 1c8c96304a8d375c22f0c9f320d285bd6e07922a)
++++ build.gradle	(revision )
+@@ -33,6 +33,7 @@
+     jcenter()
+     maven { url "http://dl.bintray.com/kotlin/ktor" }
+     maven { url "http://dl.bintray.com/kotlin/exposed" }
++    maven { url "https://dl.bintray.com/kotlin/squash" }
+ }
+ 
+ dependencies {
+@@ -45,13 +46,19 @@
+ 
+     compile group: "io.jsonwebtoken", name: "jjwt", version: "0.7.0"
+     compile group: "org.mindrot", name: "jbcrypt", version: "0.4"
+-    compile 'org.jetbrains.exposed:exposed:0.8.5'
+     compile 'com.github.salomonbrys.kotson:kotson:2.5.0'
+     compile 'org.mariadb.jdbc:mariadb-java-client:2.1.0'
+     compile group: "org.slf4j", name: "slf4j-simple", version: "1.7.25"
++    compile 'org.jetbrains.exposed:exposed:0.8.6'
++//    testCompile group: 'com.h2database', name: 'h2', version: '1.4.196'
+ 
+-    testCompile group: 'org.junit.jupiter', name: 'junit-jupiter-api', version: '5.0.0-RC2'
++
++
++    testCompile group: 'org.junit.jupiter', name: 'junit-jupiter-api', version: '5.0.0'
+     testCompile group: 'org.amshove.kluent', name: 'kluent', version: '1.28'
+     testCompile "org.jetbrains.ktor:ktor-test-host:$ktor_version"
++    testCompile"org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
++    testRuntime("org.junit.jupiter:junit-jupiter-engine:5.0.0")
++
+ }
+ 
+Index: src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/ProfileSource.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/ProfileSource.kt	(revision 1c8c96304a8d375c22f0c9f320d285bd6e07922a)
++++ src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/ProfileSource.kt	(revision )
+@@ -6,6 +6,8 @@
+ 
+     fun getProfile(username: String, currentId: Int?): Profile
+ 
++    fun getUserProfile(userId : Int): Profile
++
+     fun follow(currentId: Int, username: String): Profile
+ 
+     fun unfollow(currentId: Int, username: String): Profile
+Index: src/main/kotlin/me/avo/realworld/kotlin/ktor/data/Article.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/kotlin/me/avo/realworld/kotlin/ktor/data/Article.kt	(revision 1c8c96304a8d375c22f0c9f320d285bd6e07922a)
++++ src/main/kotlin/me/avo/realworld/kotlin/ktor/data/Article.kt	(revision )
+@@ -2,16 +2,12 @@
+ 
+ import org.joda.time.DateTime
+ 
+-data class Article(
+-        val id: Int,
+-        val slug: String,
+-        val title: String,
+-        val description: String,
+-        val body: String,
+-        val tagList: List<String>,
+-        val createdAt: DateTime,
+-        val updatedAt: DateTime,
+-        val favorited: Boolean,
+-        val favoritesCount: Int,
+-        val author: Profile
+-)
+\ No newline at end of file
++ data class Article(
++  val title: String,
++  val description: String,
++  val body: String,
++  val tagList: List<String>,
++  val slug: String,
++  val createdAt: DateTime,
++  val updatedAt: DateTime
++ )
+\ No newline at end of file
+Index: src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/RowConversions.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/RowConversions.kt	(revision 1c8c96304a8d375c22f0c9f320d285bd6e07922a)
++++ src/main/kotlin/me/avo/realworld/kotlin/ktor/persistence/RowConversions.kt	(revision )
+@@ -1,10 +1,11 @@
+ package me.avo.realworld.kotlin.ktor.persistence
+ 
+-import me.avo.realworld.kotlin.ktor.data.Article
++import me.avo.realworld.kotlin.ktor.data.ArticleDetails
+ import me.avo.realworld.kotlin.ktor.data.Profile
+ import me.avo.realworld.kotlin.ktor.data.User
+ import org.jetbrains.exposed.sql.ResultRow
+ import org.jetbrains.exposed.sql.count
++import org.jetbrains.exposed.sql.select
+ 
+ fun ResultRow.toUser() = User(
+         id = this[Users.id],
+@@ -16,23 +17,30 @@
+         image = this[Users.image]
+ )
+ 
+-fun ResultRow.toProfile(following: Boolean) = Profile(
+-        username = this[Users.username],
+-        bio = this[Users.bio],
+-        image = this[Users.image],
+-        following = following
+-)
++fun ResultRow.toProfile(following: Boolean) : Profile {
++
++   return Profile(
++
++            username = this[Users.username],
++            bio = this[Users.bio],
++            image = this[Users.image],
++            following = following
++    )
++}
+ 
+-fun ResultRow.toArticle() = Article(
++fun ResultRow.toArticle() = ArticleDetails(
+         id = this[Articles.id],
+         slug = this[Articles.slug],
+         title = this[Articles.title],
+         description = this[Articles.description],
+         body = this[Articles.body],
+-        tagList = listOf(),
++        tagList = Tags.slice(Tags.tag)
++                .select { Tags.articleId eq this@toArticle[Articles.id] }
++                .map { it[Tags.tag] },
++
+         createdAt = this[Articles.createdAt],
+         updatedAt = this[Articles.updatedAt],
+         favorited = false, // TODO
+-        favoritesCount = this[Favorites.articleId.count()],
+-        author = this.toProfile(false)
+-)
+\ No newline at end of file
++        favoritesCount =  0,//this[Favorites.articleId.count()],
++        author = ProfileSourceImpl().getUserProfile(this[Articles.authorId]) //ProfileSourceImpl().getProfile(UserSourceImpl().findUser(UserSourceImpl().byId(this[Articles.authorId])).username,null) //this.toProfile(false)
++)
+Index: src/main/kotlin/me/avo/realworld/kotlin/ktor/data/ArticleDetails.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/kotlin/me/avo/realworld/kotlin/ktor/data/ArticleDetails.kt	(revision )
++++ src/main/kotlin/me/avo/realworld/kotlin/ktor/data/ArticleDetails.kt	(revision )
+@@ -0,0 +1,19 @@
++package me.avo.realworld.kotlin.ktor.data
++
++import org.joda.time.DateTime
++
++data class ArticleDetails(
++        val id: Int,
++        val slug: String,
++        val title: String,
++        val description: String,
++        val body: String,
++        val tagList: List<String>,
++        val createdAt: DateTime,
++        val updatedAt: DateTime,
++        val favorited: Boolean,
++        val favoritesCount: Int,
++        val author: Profile
++) {
++   fun toArticle() =  Article(title,description,body,tagList,slug,createdAt,updatedAt)
++}
+\ No newline at end of file
+Index: src/main/kotlin/me/avo/realworld/kotlin/ktor/server/Server.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/kotlin/me/avo/realworld/kotlin/ktor/server/Server.kt	(revision 1c8c96304a8d375c22f0c9f320d285bd6e07922a)
++++ src/main/kotlin/me/avo/realworld/kotlin/ktor/server/Server.kt	(revision )
+@@ -28,7 +28,7 @@
+         register<LoginCredentials>()
+         register<RegistrationDetails>()
+         register<User>()
+-        register<Article>()
++        register<ArticleDetails>()
+         register<Profile>()
+     }
+ 
+Index: src/test/kotlin/me/avo/realworld/kotlin/ktor/TableSetup.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/test/kotlin/me/avo/realworld/kotlin/ktor/TableSetup.kt	(revision 1c8c96304a8d375c22f0c9f320d285bd6e07922a)
++++ src/test/kotlin/me/avo/realworld/kotlin/ktor/TableSetup.kt	(revision )
+@@ -1,13 +1,10 @@
+ package me.avo.realworld.kotlin.ktor
+ 
+ import me.avo.realworld.kotlin.ktor.auth.BcryptHasher
+-import me.avo.realworld.kotlin.ktor.auth.LoginHandler
+-import me.avo.realworld.kotlin.ktor.data.Article
+-import me.avo.realworld.kotlin.ktor.data.Profile
+-import me.avo.realworld.kotlin.ktor.data.RegistrationDetails
+-import me.avo.realworld.kotlin.ktor.data.User
++import me.avo.realworld.kotlin.ktor.data.*
+ import me.avo.realworld.kotlin.ktor.persistence.*
+ import org.jetbrains.exposed.sql.SchemaUtils
++import org.jetbrains.exposed.sql.selectAll
+ import org.jetbrains.exposed.sql.transactions.transaction
+ import org.joda.time.DateTime
+ import org.junit.jupiter.api.Disabled
+@@ -18,6 +15,7 @@
+ 
+     @Test
+     fun setup() {
++
+         setupEnvironment()
+     }
+ 
+@@ -30,7 +28,17 @@
+         SchemaUtils.create(*tables)
+         availableUsers.forEach(RegistrationDetails::insert)
+         followSource follow followTarget
++
++        val user = UserSourceImpl().findUser("some@other.com")
++
++        availableArticles.forEach{
++            ArticleSourceImpl().insertArticle(user,it)
++        }
++
++
+     }
++
++
+ }
+ 
+ fun RegistrationDetails.insert() {
+@@ -38,7 +46,7 @@
+     availableMap.put(this, id)
+ }
+ 
+-fun Article.insert() {
++fun ArticleDetails.insert() {
+     //ArticleSourceImpl().insertArticle()
+ }
+ 
+@@ -59,10 +67,15 @@
+ 
+ val availableUsers = listOf(details, otherDetails, followSource, followTarget)
+ val availableMap = mutableMapOf<RegistrationDetails, Int>()
+-
+ // Articles
+-val artOne = Article(0, "Test", "Test", "This is just a test", "Only a test but wow!",
+-        listOf("test"), DateTime(), DateTime(), false, 0, Profile("", "", null, false))
++
++
++val artOne = Article("titletest","description test","body test",listOf("tag1"), "test1",DateTime(), DateTime())
++val artTwo = Article("titletest1","description test","body test",listOf("tag2"), "test2",DateTime(), DateTime())
++val artThree = Article("titletest2","description test","body test",listOf("tag3"), "test3",DateTime(), DateTime())
++
++val availableArticles = listOf(artOne, artTwo, artThree)
++
+ 
+ // Tags
+-val availableTags = listOf("Some", "Tags", "Are", "Already", "here")
+\ No newline at end of file
++val availableTags = listOf("tag1","tag2","tag3")
+\ No newline at end of file
+Index: src/main/kotlin/me/avo/realworld/kotlin/ktor/server/routes/ArticleRoute.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/kotlin/me/avo/realworld/kotlin/ktor/server/routes/ArticleRoute.kt	(revision 1c8c96304a8d375c22f0c9f320d285bd6e07922a)
++++ src/main/kotlin/me/avo/realworld/kotlin/ktor/server/routes/ArticleRoute.kt	(revision )
+@@ -1,7 +1,6 @@
+ package me.avo.realworld.kotlin.ktor.server.routes
+ 
+ import me.avo.realworld.kotlin.ktor.data.Article
+-import me.avo.realworld.kotlin.ktor.data.ArticleDetails
+ import me.avo.realworld.kotlin.ktor.data.ArticleQuery
+ import me.avo.realworld.kotlin.ktor.persistence.ArticleSource
+ import me.avo.realworld.kotlin.ktor.persistence.ArticleSourceImpl
+@@ -29,9 +28,7 @@
+ 
+     post {
+         val user = requireLogin()
+-        val details = call.receive<Article>().let {
+-            ArticleDetails(it.title, it.description, it.body, it.tagList)
+-        }
++        val details = call.receive<Article>()
+         val article = articleSource.insertArticle(user, details)
+         call.respond(article)
+     }
+@@ -39,28 +36,28 @@
+     route("{slug}") {
+ 
+         get {
+-            TODO("Get Article")
++            TODO("Get ArticleDetails")
+         }
+ 
+         put {
+             requireLogin()
+-            TODO("Update Article")
++            TODO("Update ArticleDetails")
+         }
+ 
+         delete {
+             requireLogin()
+-            TODO("Delete Article")
++            TODO("Delete ArticleDetails")
+         }
+ 
+         route("comments") {
+             post {
+                 requireLogin()
+-                TODO("Add Comments to an Article")
++                TODO("Add Comments to an ArticleDetails")
+             }
+ 
+             get {
+                 optionalLogin()
+-                TODO("Get Comments from an Article")
++                TODO("Get Comments from an ArticleDetails")
+             }
+ 
+             delete("{id}") {
+@@ -73,12 +70,12 @@
+         route("favorite") {
+             post {
+                 requireLogin()
+-                TODO("Favorite Article")
++                TODO("Favorite ArticleDetails")
+             }
+ 
+             delete {
+                 requireLogin()
+-                TODO("Unfavorite Article")
++                TODO("Unfavorite ArticleDetails")
+             }
+         }
+ 
