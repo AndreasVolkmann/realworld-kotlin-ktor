@@ -1,6 +1,7 @@
 package me.avo.realworld.kotlin.ktor.server.routes
 
 import me.avo.realworld.kotlin.ktor.data.Article
+import me.avo.realworld.kotlin.ktor.data.ArticleBasic
 import me.avo.realworld.kotlin.ktor.data.ArticleQuery
 import me.avo.realworld.kotlin.ktor.persistence.ArticleSource
 import me.avo.realworld.kotlin.ktor.persistence.ArticleSourceImpl
@@ -8,6 +9,7 @@ import me.avo.realworld.kotlin.ktor.server.optionalLogin
 import me.avo.realworld.kotlin.ktor.server.requireLogin
 import org.jetbrains.ktor.application.Application
 import org.jetbrains.ktor.application.install
+import org.jetbrains.ktor.http.HttpStatusCode
 import org.jetbrains.ktor.request.receive
 import org.jetbrains.ktor.response.respond
 import org.jetbrains.ktor.routing.*
@@ -48,13 +50,30 @@ import org.jetbrains.ktor.routing.*
             }
 
             put {
-                requireLogin()
-                TODO("Update ArticleDetails")
+               val user = requireLogin()
+                val slug = call.parameters["slug"]
+                if(slug != null) {
+                    val articles = articleSource.getArticle(slug)
+
+                   val received = call.receive<ArticleBasic>()
+                    val resulit = articleSource.updateArticle(received.CompareAndUpdate(articles))
+                    resulit?.let { it1 -> call.respond(it1) }
+                }
+
             }
 
             delete {
-                requireLogin()
-                TODO("Delete ArticleDetails")
+                val user = requireLogin()
+                val slug = call.parameters["slug"]
+                if(slug != null) {
+                        val articles = try {articleSource.getArticle(slug) } catch (e : NoSuchElementException) {null}
+                    if (articles != null) {
+                        articleSource.deleteArticle(articles.id)
+                        call.respond(HttpStatusCode.OK)
+                    } else {
+                        call.respond(HttpStatusCode.NotFound)
+                    }
+                    }
             }
 
             route("comments") {

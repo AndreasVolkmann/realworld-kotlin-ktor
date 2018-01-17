@@ -30,6 +30,7 @@ fun startServer() = embeddedServer(Netty, 5000) {
         register<User>()
         register<ArticleDetails>()
         register<Profile>()
+        register<ArticleBasic>()
     }
 
     install(StatusPages) {
